@@ -15,18 +15,33 @@ def connectionLoop(sock):
    while True:
       data, addr = sock.recvfrom(1024)
       data = str(data)
+      data = data[2:-1] #remove b', put after convert json to string
+      #print(data)
       if addr in clients:
-         if 'heartbeat' in data:
+         #if 'heartbeat' in data:
+         if 'sendPos' and 'sendRot' in data:
             clients[addr]['lastBeat'] = datetime.now()
+            playerInfo = {}
+            playerInfo = json.loads(data)
+            #print(playerInfo)
+            # save position and rotation
+            clients[addr]['position'] = playerInfo['sendPos']
+            clients[addr]['rotation'] = playerInfo['sendRot']
       else:
-         if 'connect' in data:
+         if 'connect' in data: #call when there is a new client
             clients[addr] = {}
             clients[addr]['lastBeat'] = datetime.now()
             clients[addr]['color'] = 0
-            message = {"cmd": 0,"player":{"id":str(addr)}}
+            clients[addr]['position'] = 0
+            clients[addr]['rotation'] = 0
+            message = {"cmd": 4,"player":[{"id":str(addr)}]}
             m = json.dumps(message)
-            newMessage = {"cmd": 2, "player":[]}
+            sock.sendto(bytes(m, 'utf8'), (addr[0],addr[1]))
             
+            message = {"cmd": 0,"player":[{"id":str(addr)}]}
+            m = json.dumps(message)
+            
+            newMessage = {"cmd": 2, "player":[]}
             for c in clients:
                sock.sendto(bytes(m,'utf8'), (c[0],c[1]))
                player = {}
@@ -34,6 +49,7 @@ def connectionLoop(sock):
                newMessage['player'].append(player)
                nm = json.dumps(newMessage)
                sock.sendto(bytes(nm, 'utf8'), (addr[0],addr[1]))
+
 
 def cleanClients(sock):
    while True:
@@ -62,10 +78,12 @@ def gameLoop(sock):
       clients_lock.acquire()
       print (clients)
       for c in clients:
+         #clients[c]['color'] = {"R": random.random(), "G": random.random(), "B": random.random()}
          player = {}
-         clients[c]['color'] = {"R": random.random(), "G": random.random(), "B": random.random()}
          player['id'] = str(c)
          player['color'] = clients[c]['color']
+         player['position'] = clients[c]['position']
+         player['rotation'] = clients[c]['rotation']
          GameState['players'].append(player)
       s = json.dumps(GameState)
       print(s)
@@ -73,7 +91,7 @@ def gameLoop(sock):
          sock.sendto(bytes(s,'utf8'), (c[0],c[1]))
       print("Current Connected: %d" % len (clients))
       clients_lock.release()
-      time.sleep(1)
+      time.sleep(1/30)
 
 def main():
    port = 12345
